@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-10-14 15:00:07
+
+- **Commit:** `43c7ea9` `43c7ea90a8d92984a081efc29af66931e09dba3d`
+- **Message:** fix usda results: scale branded per-100 values to one serving
+- **Files changed:**
+  - `index.html`
+  - `intent.md`
+  - `tests/usda.test.js`
+
+---
 ## 2026-10-14 13:21:56
 
 - **Commit:** `36bea5f` `36bea5fe23caf6b0003fb9539de2144f9e1d0cb6`
