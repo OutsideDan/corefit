@@ -225,6 +225,15 @@
         <div id="smartSuggestions" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
       </section>
 
+      <!-- Saved meals: one tap re-logs every item to the selected meal and date -->
+      <section class="card p-5 space-y-3">
+        <div>
+          <h2 class="font-bold text-base">Saved Meals</h2>
+          <p class="text-xs text-slate-400">"+ Log" adds every item to the meal selected above, on the date shown.</p>
+        </div>
+        <div id="savedMeals" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+      </section>
+
       <!-- Food Search -->
       <section class="card p-5 space-y-4">
         <div class="flex flex-wrap items-center justify-between gap-2">
@@ -239,6 +248,23 @@
             Search USDA
           </button>
         </div>
+
+        <details id="quickAddPanel" class="bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <summary class="text-sm font-semibold cursor-pointer">Quick add: enter your own food</summary>
+          <div class="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-3">
+            <div class="col-span-2 sm:col-span-6">
+              <label for="qaName" class="text-[11px] uppercase text-slate-400 font-semibold">Food name</label>
+              <input type="text" id="qaName" maxlength="80" placeholder="e.g. Bean bowl" class="w-full mt-1 px-3 py-2 text-sm" />
+            </div>
+            <div><label for="qaCal" class="text-[11px] uppercase text-slate-400 font-semibold">kcal</label><input type="number" id="qaCal" min="0" inputmode="decimal" class="w-full mt-1 px-2 py-2 text-sm" /></div>
+            <div><label for="qaPro" class="text-[11px] uppercase text-slate-400 font-semibold">Protein g</label><input type="number" id="qaPro" min="0" inputmode="decimal" class="w-full mt-1 px-2 py-2 text-sm" /></div>
+            <div><label for="qaCarb" class="text-[11px] uppercase text-slate-400 font-semibold">Carbs g</label><input type="number" id="qaCarb" min="0" inputmode="decimal" class="w-full mt-1 px-2 py-2 text-sm" /></div>
+            <div><label for="qaFat" class="text-[11px] uppercase text-slate-400 font-semibold">Fat g</label><input type="number" id="qaFat" min="0" inputmode="decimal" class="w-full mt-1 px-2 py-2 text-sm" /></div>
+            <div><label for="qaFib" class="text-[11px] uppercase text-slate-400 font-semibold">Fiber g</label><input type="number" id="qaFib" min="0" inputmode="decimal" class="w-full mt-1 px-2 py-2 text-sm" /></div>
+            <div class="flex items-end"><button type="button" onclick="quickAdd()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs py-2.5 rounded-lg">+ Log</button></div>
+          </div>
+          <p id="quickAddMsg" class="text-xs min-h-[1rem] pt-2"></p>
+        </details>
 
         <div id="foodResults" class="space-y-2.5 max-h-[420px] overflow-y-auto pr-1"></div>
       </section>
@@ -299,13 +325,14 @@
   const todayStr = localDateStr();
 
   let db = null, auth = null, uid = null;
-  let unsubItems = null, unsubDay = null, unsubProfile = null;
+  let unsubItems = null, unsubDay = null, unsubProfile = null, unsubMeals = null;
   let profileSaveTimer = null;
   let shownFoods = [], shownSuggestions = [];
   let pendingImport = null;
 
   // items: logged foods for currentDate, each { id, slot, name, cal, pro, carb, fat, fib, createdAt }
-  let state = { profile: { ...DEFAULT_PROFILE }, currentDate: todayStr, items: [], water: 0 };
+  // meals: saved meals, each { id, name, items: [{ name, cal, pro, carb, fat, fib }] }
+  let state = { profile: { ...DEFAULT_PROFILE }, currentDate: todayStr, items: [], water: 0, meals: [] };
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
   function esc(s) {
@@ -321,6 +348,7 @@
   const userRef  = () => db.collection(COREFIT_COLL).doc(uid);
   const itemsRef = () => userRef().collection('items');
   const dayRef   = (d) => userRef().collection('days').doc(d);
+  const mealsRef = () => userRef().collection('meals');
 
   function setSync(text, tone) {
     const el = document.getElementById('syncStatus');
@@ -370,9 +398,16 @@
     }, onSyncError);
   }
 
+  function subscribeMeals() {
+    unsubMeals = mealsRef().onSnapshot(snap => {
+      state.meals = snap.docs.map(x => ({ id: x.id, ...x.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      renderSavedMeals();
+    }, onSyncError);
+  }
+
   function stopListeners() {
-    [unsubItems, unsubDay, unsubProfile].forEach(fn => fn && fn());
-    unsubItems = unsubDay = unsubProfile = null;
+    [unsubItems, unsubDay, unsubProfile, unsubMeals].forEach(fn => fn && fn());
+    unsubItems = unsubDay = unsubProfile = unsubMeals = null;
   }
 
   // ── Profile ───────────────────────────────────────────────────────────────────
@@ -455,6 +490,100 @@
     if (oz < 0 && state.water <= 0) return;
     // increment() merges concurrent changes from both devices instead of overwriting
     dayRef(state.currentDate).set({ water: firebase.firestore.FieldValue.increment(oz) }, { merge: true }).catch(onSyncError);
+  }
+
+  // ── Quick add + Saved meals ───────────────────────────────────────────────────
+  // Pure functions (unit-tested in tests/quickadd.test.js)
+  function validateQuickAdd(raw) {
+    const name = String(raw.name ?? '').trim();
+    if (!name) return { ok: false, error: 'Enter a food name.' };
+    if (String(raw.cal ?? '').trim() === '') return { ok: false, error: 'Enter calories.' };
+    const labels = { cal: 'Calories', pro: 'Protein', carb: 'Carbs', fat: 'Fat', fib: 'Fiber' };
+    const item = { name: name.slice(0, 80) };
+    for (const [k, label] of Object.entries(labels)) {
+      const s = String(raw[k] ?? '').trim();
+      const n = s === '' ? 0 : Number(s);
+      if (!Number.isFinite(n) || n < 0) return { ok: false, error: `${label} must be a number of 0 or more.` };
+      item[k] = Math.round(n);
+    }
+    // Typo guard: warn (never block) when calories are >25% and >50 kcal off the macro math
+    const est = item.pro * 4 + item.carb * 4 + item.fat * 9;
+    const warning = est > 0 && Math.abs(item.cal - est) > Math.max(50, est * 0.25)
+      ? `Logged, but calories (${item.cal}) don't match the macros (about ${est} kcal). Check for a typo.`
+      : '';
+    return { ok: true, item, warning };
+  }
+
+  function mealFromItems(name, items) {
+    const clean = String(name ?? '').trim();
+    if (!clean) return { ok: false, error: 'Give the meal a name.' };
+    if (!items || !items.length) return { ok: false, error: 'Nothing is logged in this meal yet.' };
+    return { ok: true, meal: { name: clean.slice(0, 60), items: items.map(({ name, cal, pro, carb, fat, fib }) => ({ name, cal, pro, carb, fat, fib: fib || 0 })) } };
+  }
+
+  function itemsFromMeal(meal, date, slot, now) {
+    return (meal.items || []).map((it, i) => ({
+      date, slot, name: it.name, cal: it.cal, pro: it.pro, carb: it.carb, fat: it.fat, fib: it.fib || 0, createdAt: now + i
+    }));
+  }
+
+  function quickAdd() {
+    const v = (id) => document.getElementById(id).value;
+    const msg = document.getElementById('quickAddMsg');
+    const r = validateQuickAdd({ name: v('qaName'), cal: v('qaCal'), pro: v('qaPro'), carb: v('qaCarb'), fat: v('qaFat'), fib: v('qaFib') });
+    if (!r.ok) { msg.textContent = r.error; msg.className = 'text-xs min-h-[1rem] text-rose-400'; return; }
+    addFoodItem(r.item, 1);
+    msg.textContent = r.warning || `Logged "${r.item.name}" to ${document.getElementById('mealSlotSelect').value}.`;
+    msg.className = 'text-xs min-h-[1rem] ' + (r.warning ? 'text-amber-300' : 'text-emerald-400');
+    ['qaName', 'qaCal', 'qaPro', 'qaCarb', 'qaFat', 'qaFib'].forEach(id => { document.getElementById(id).value = ''; });
+  }
+
+  function saveSlotAsMeal(slot) {
+    const items = state.items.filter(i => i.slot === slot);
+    const name = window.prompt(`Name this meal (${items.length} item${items.length === 1 ? '' : 's'} from ${slot}):`, '');
+    if (name === null) return;
+    const r = mealFromItems(name, items);
+    if (!r.ok) { window.alert(r.error); return; }
+    mealsRef().add({ ...r.meal, createdAt: Date.now() }).catch(onSyncError);
+  }
+
+  function logSavedMeal(id) {
+    const meal = state.meals.find(m => m.id === id);
+    if (!meal) return;
+    const batch = db.batch();
+    itemsFromMeal(meal, state.currentDate, document.getElementById('mealSlotSelect').value, Date.now())
+      .forEach(rec => batch.set(itemsRef().doc(), rec));
+    batch.commit().catch(onSyncError);
+  }
+
+  function deleteSavedMeal(id) {
+    const meal = state.meals.find(m => m.id === id);
+    if (!meal) return;
+    const { name } = meal;  // confirm() is plain text, not HTML
+    if (!window.confirm(`Delete saved meal "${name}"? Food already logged from it stays.`)) return;
+    mealsRef().doc(id).delete().catch(onSyncError);
+  }
+
+  function renderSavedMeals() {
+    const el = document.getElementById('savedMeals');
+    if (!state.meals.length) {
+      el.innerHTML = `<p class="text-xs text-slate-500 italic">No saved meals yet. Log a meal, then use "Save as meal" on its card.</p>`;
+      return;
+    }
+    el.innerHTML = state.meals.map(m => {
+      const kcal = (m.items || []).reduce((s, i) => s + (i.cal || 0), 0);
+      return `
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <div class="text-sm font-bold text-slate-100 break-words">${esc(m.name)}</div>
+            <div class="text-xs text-slate-400">${(m.items || []).length} items • ${kcal} kcal</div>
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <button type="button" onclick="logSavedMeal('${esc(m.id)}')" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-3 py-2 rounded-lg">+ Log</button>
+            <button type="button" onclick="deleteSavedMeal('${esc(m.id)}')" aria-label="Delete saved meal" class="text-slate-500 hover:text-rose-400 px-2">✕</button>
+          </div>
+        </div>`;
+    }).join('');
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────────
@@ -640,9 +769,12 @@
       const slotCal = Math.round(items.reduce((s, i) => s + i.cal, 0));
       return `
         <div class="card p-4 space-y-3">
-          <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-2 gap-2">
             <h3 class="font-bold text-sm">${slot}</h3>
-            <span class="text-xs text-emerald-400 font-semibold">${slotCal} kcal</span>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="saveSlotAsMeal('${slot}')" ${items.length ? '' : 'disabled'} class="text-[11px] text-slate-400 hover:text-emerald-400 underline disabled:opacity-30 disabled:no-underline disabled:cursor-not-allowed">Save as meal</button>
+              <span class="text-xs text-emerald-400 font-semibold">${slotCal} kcal</span>
+            </div>
           </div>
           <div class="space-y-1.5">
             ${items.length === 0 ? `<p class="text-xs text-slate-500 italic">No items logged.</p>` : items.map(it => `
@@ -797,6 +929,7 @@
     populateBiometricInputs();
     renderFoodList(STAPLES);
     subscribeProfile();
+    subscribeMeals();
     subscribeDate(state.currentDate);
   }
 

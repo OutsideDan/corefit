@@ -18,7 +18,7 @@
  *     and uncomment the block in CODE QUALITY.
  */
 
-import { readFileSync, writeFileSync, existsSync, statSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, statSync, readdirSync } from 'fs';
 import { execSync } from 'child_process';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -202,7 +202,7 @@ if (!scriptBlock) {
   ? fail('toISOString().split() used for a date in the script block — use localDateStr() (UTC rollover bug)')
   : pass('Dates use local time (no toISOString() date syntax)');
 // Any HTML built from food names must go through esc(); USDA data is third-party.
-/\$\{(f|it)\.name\}/.test(scriptBlock)
+/\$\{(f|it|m|meal)\.name\}/.test(scriptBlock)
   ? fail('Unescaped food name interpolated into HTML — wrap in esc()')
   : pass('Food names are escaped before rendering (esc)');
 
@@ -214,13 +214,19 @@ const searchFn = scriptBlock.match(/async function searchUSDA\(\)[\s\S]*?\n  \}\
 /DEMO_KEY/.test(scriptBlock)
   ? fail('CoreFit USDA search uses DEMO_KEY (10 req/hr), use USDA_API_KEY')
   : pass('CoreFit USDA search uses the personal key, not DEMO_KEY');
-// Unit tests for search helpers
-try {
-  execSync('node tests/search.test.js', { cwd: ROOT, stdio: 'pipe' });
-  pass('CoreFit search unit tests pass (tests/search.test.js)');
-} catch (e) {
-  fail(`CoreFit search unit tests failed:\n${e.stdout?.toString().split('\n').filter(l => l.startsWith('FAIL')).join('\n')}`);
+// Unit tests: every tests/*.test.js must pass
+for (const f of readdirSync(resolve(ROOT, 'tests')).filter(f => f.endsWith('.test.js'))) {
+  try {
+    execSync(`node tests/${f}`, { cwd: ROOT, stdio: 'pipe' });
+    pass(`CoreFit unit tests pass (tests/${f})`);
+  } catch (e) {
+    fail(`CoreFit unit tests failed (tests/${f}):\n${(e.stdout?.toString() || e.message).split('\n').filter(l => l.startsWith('FAIL') || l.includes('Error')).join('\n')}`);
+  }
 }
+// Saved meals must live under the signed-in user's path, or the rules block them
+/const mealsRef\s*=\s*\(\)\s*=>\s*userRef\(\)\.collection\('meals'\)/.test(scriptBlock)
+  ? pass('CoreFit saved meals stored under corefit/{uid}/meals')
+  : fail('CoreFit mealsRef must be userRef().collection(\'meals\') so Firestore rules allow it');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CSS HEALTH
