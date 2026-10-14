@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F2EDE4">
+<title>Personal Webapp Template</title>
+
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
+
+<style>
+  :root {
+    --bg:    #F2EDE4;
+    --ink:   #1E1E1B;
+    --rule:  rgba(0,0,0,0.12);
+    --accent:#2C3B2D;
+    --error: #B05E3A;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-weight: 300;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .card {
+    width: 100%;
+    max-width: 360px;
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    padding: 28px;
+  }
+  h1 { font-size: 22px; font-weight: 500; margin-bottom: 18px; }
+  label { display: block; font-size: 13px; margin: 12px 0 4px; }
+  input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    font: inherit;
+    background: var(--bg);
+  }
+  button {
+    width: 100%;
+    padding: 11px;
+    margin-top: 16px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--accent); margin-top: 8px; }
+  .error { color: var(--error); font-size: 13px; min-height: 18px; margin-top: 10px; }
+  .hidden { display: none !important; }
+  main#app { width: 100%; max-width: 600px; padding: 20px; text-align: center; }
+  main#app .greeting { font-size: 18px; margin-bottom: 12px; }
+  main#app .placeholder { color: rgba(0,0,0,0.5); font-style: italic; }
+</style>
+</head>
+<body>
+
+<div id="login" class="card">
+  <h1>Sign in</h1>
+  <label for="username">Username</label>
+  <input type="text" id="username" autocomplete="username" placeholder="your nickname">
+  <label for="pin">PIN</label>
+  <input type="password" id="pin" maxlength="8" autocomplete="current-password" placeholder="4–8 digits">
+  <div id="loginError" class="error"></div>
+  <button type="button" id="loginBtn">Log In</button>
+  <button type="button" id="createBtn" class="secondary">Create Account</button>
+</div>
+
+<main id="app" class="hidden">
+  <div class="greeting">Signed in as <span id="userLabel"></span></div>
+  <p class="placeholder">Your app goes here.</p>
+  <button type="button" id="logoutBtn" class="secondary" style="max-width:200px; margin:20px auto 0;">Switch Account</button>
+</main>
+
+<script>
+  // ═════════════════════════════════════════════════════════════════════════════
+  // Stack constants (personal-webapp-template)
+  // ═════════════════════════════════════════════════════════════════════════════
+  const FIREBASE_PROJECT = 'sendit-67c81';
+  const ACCOUNTS_COLL    = 'accounts';        // doc id = lowercased username
+  // PIN hashing matches SendIt: SHA-256 of the raw PIN, hex string.
+
+  const firebaseConfig = {
+    apiKey:            "AIzaSyAgMOSs7_6C6ZSAuqgRtsR8pXeXnEkwlwA",
+    authDomain:        "sendit-67c81.firebaseapp.com",
+    projectId:         "sendit-67c81",
+    storageBucket:     "sendit-67c81.firebasestorage.app",
+    messagingSenderId: "710942811721",
+    appId:             "1:710942811721:web:74493e7bd850403eedc198"
+  };
+
+  let db = null;
+  let currentUser = null;
+
+  // ── Auth helpers ────────────────────────────────────────────────────────────
+  async function hashPin(pin) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function createAccount(username, pin) {
+    const clean = username.trim().toLowerCase();
+    if (!/^[a-z0-9_-]{2,20}$/.test(clean)) throw new Error("Username: 2–20 chars, letters/numbers/- or _ only");
+    if (!/^\d{4,8}$/.test(pin))            throw new Error("PIN must be 4–8 digits");
+    const docRef   = db.collection(ACCOUNTS_COLL).doc(clean);
+    const existing = await docRef.get();
+    if (existing.exists) throw new Error("That username is taken — try another");
+    const pinHash = await hashPin(pin);
+    await docRef.set({ pinHash, createdAt: new Date().toISOString() });
+    currentUser = { username: clean };
+    showApp();
+  }
+
+  async function loginAccount(username, pin) {
+    const clean = username.trim().toLowerCase();
+    if (!clean) throw new Error("Enter your username");
+    if (!pin)   throw new Error("Enter your PIN");
+    const docRef = db.collection(ACCOUNTS_COLL).doc(clean);
+    const doc    = await docRef.get();
+    if (!doc.exists) throw new Error("Account not found");
+    const pinHash = await hashPin(pin);
+    if (pinHash !== doc.data().pinHash) throw new Error("Wrong PIN");
+    currentUser = { username: clean };
+    showApp();
+  }
+
+  // ── UI ──────────────────────────────────────────────────────────────────────
+  function showApp() {
+    document.getElementById('login').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    document.getElementById('userLabel').textContent = currentUser.username;
+  }
+
+  function showLogin() {
+    currentUser = null;
+    document.getElementById('app').classList.add('hidden');
+    document.getElementById('login').classList.remove('hidden');
+    document.getElementById('username').value = '';
+    document.getElementById('pin').value = '';
+    document.getElementById('loginError').textContent = '';
+  }
+
+  function bindEvents() {
+    const errEl = document.getElementById('loginError');
+    const run = async (fn) => {
+      errEl.textContent = '';
+      try { await fn(); }
+      catch (e) { errEl.textContent = e.message || 'Something went wrong'; }
+    };
+    document.getElementById('loginBtn').addEventListener('click', () => run(() =>
+      loginAccount(document.getElementById('username').value, document.getElementById('pin').value)
+    ));
+    document.getElementById('createBtn').addEventListener('click', () => run(() =>
+      createAccount(document.getElementById('username').value, document.getElementById('pin').value)
+    ));
+    document.getElementById('pin').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('loginBtn').click();
+    });
+    document.getElementById('logoutBtn').addEventListener('click', showLogin);
+  }
+
+  // ── Boot ────────────────────────────────────────────────────────────────────
+  window.addEventListener('load', () => {
+    if (typeof firebase === 'undefined') {
+      document.getElementById('loginError').textContent =
+        'Could not load Firebase. Check your internet connection and refresh.';
+      return;
+    }
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    bindEvents();
+  });
+</script>
+
+</body>
+</html>

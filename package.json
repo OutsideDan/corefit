@@ -1,0 +1,16 @@
+{
+  "name": "personal-webapp-template",
+  "version": "1.0.0",
+  "description": "Template for Dan's personal single-file webapps. Replace this description per app.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "icons":      "node scripts/make-icons.js",
+    "check":      "node scripts/pre-deploy.js --check-only",
+    "predeploy":  "node scripts/pre-deploy.js",
+    "deploy":     "git push origin main"
+  },
+  "devDependencies": {
+    "sharp": "^0.33.0"
+  }
+}
