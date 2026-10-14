@@ -206,6 +206,22 @@ if (!scriptBlock) {
   ? fail('Unescaped food name interpolated into HTML — wrap in esc()')
   : pass('Food names are escaped before rendering (esc)');
 
+// USDA search must surface failures instead of silently showing the default list.
+const searchFn = scriptBlock.match(/async function searchUSDA\(\)[\s\S]*?\n  \}\n/)?.[0] ?? '';
+/res\.ok/.test(searchFn) && /showStaplesFallback\(/.test(searchFn)
+  ? pass('CoreFit USDA search checks res.ok and shows a visible fallback')
+  : fail('CoreFit USDA search must check res.ok and call showStaplesFallback() on failure');
+/DEMO_KEY/.test(scriptBlock)
+  ? fail('CoreFit USDA search uses DEMO_KEY (10 req/hr), use USDA_API_KEY')
+  : pass('CoreFit USDA search uses the personal key, not DEMO_KEY');
+// Unit tests for search helpers
+try {
+  execSync('node tests/search.test.js', { cwd: ROOT, stdio: 'pipe' });
+  pass('CoreFit search unit tests pass (tests/search.test.js)');
+} catch (e) {
+  fail(`CoreFit search unit tests failed:\n${e.stdout?.toString().split('\n').filter(l => l.startsWith('FAIL')).join('\n')}`);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // CSS HEALTH
 // ═══════════════════════════════════════════════════════════════════════════════

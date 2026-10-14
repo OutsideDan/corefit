@@ -259,6 +259,9 @@
   const COREFIT_COLL       = 'corefit';   // corefit/{uid}: profile; /days/{date}: water; /items/{id}: logged foods
   const LEGACY_STORAGE_KEY = 'DAN_COREFIT_PERMANENT_V2';  // pre-sync localStorage data; read-only, import source
   const SLOTS              = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
+  // Personal api.data.gov key (3,600 req/hr). Public by design: the worst case is
+  // someone using up the quota, which shows the same "limit reached" fallback. No data access.
+  const USDA_API_KEY       = 'I8RSaWuDHNn5QSf8WZuamYLEDIYur2rTRLyaJjIe';
 
   const firebaseConfig = {
     apiKey:            "AIzaSyAgMOSs7_6C6ZSAuqgRtsR8pXeXnEkwlwA",
@@ -503,9 +506,18 @@
     `).join('');
   }
 
-  function renderFoodList(list) {
+  // Fallback search used when USDA is unavailable: every word must appear in the name or tag
+  function searchStaples(q) {
+    const words = String(q).toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    return STAPLES.filter(({ name, tag }) => words.every(w => `${name} ${tag}`.toLowerCase().includes(w)));
+  }
+
+  function renderFoodList(list, notice = '') {
     shownFoods = list;
-    document.getElementById('foodResults').innerHTML = list.map((f, idx) => `
+    document.getElementById('foodResults').innerHTML =
+      (notice ? `<div class="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">${esc(notice)}</div>` : '') +
+      list.map((f, idx) => `
       <div class="bg-slate-900 p-3.5 rounded-xl border border-slate-800 hover:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div class="space-y-1 flex-1">
           <div class="flex flex-wrap items-center gap-2">
@@ -536,35 +548,50 @@
     `).join('');
   }
 
+  // Shows matching staples with a visible reason instead of failing silently
+  function showStaplesFallback(q, why) {
+    const local = searchStaples(q);
+    renderFoodList(local, `${why} ${local.length ? `Showing ${local.length} matching staple${local.length === 1 ? '' : 's'}.` : 'No matching staples either.'}`);
+  }
+
   async function searchUSDA() {
     const q = document.getElementById('usdaQuery').value.trim();
     if (!q) { renderFoodList(STAPLES); return; }
     const container = document.getElementById('foodResults');
     container.innerHTML = `<div class="text-sm text-slate-300 p-4">Searching live USDA database for "${esc(q)}"...</div>`;
+    let res;
     try {
-      const res = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=DEMO_KEY&query=${encodeURIComponent(q)}&pageSize=12`);
-      const data = await res.json();
-      const mapped = (data.foods || []).map(item => {
-        const getN = (id) => {
-          const n = (item.foodNutrients || []).find(x => x.nutrientId === id);
-          return n ? Math.round(n.value) : 0;
-        };
-        const servingTxt = item.servingSize ? `${Math.round(item.servingSize)}${item.servingSizeUnit || 'g'}` : '100g standard';
-        return {
-          name: item.description,
-          brand: item.brandOwner || item.dataType || 'USDA Verified',
-          serving: servingTxt,
-          cal: getN(1008),
-          pro: getN(1003),
-          carb: getN(1005),
-          fat: getN(1004),
-          fib: getN(1079)
-        };
-      });
-      renderFoodList(mapped.length ? mapped : STAPLES);
+      res = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${USDA_API_KEY}&query=${encodeURIComponent(q)}&pageSize=12`);
     } catch (e) {
-      renderFoodList(STAPLES);
+      showStaplesFallback(q, 'USDA search unavailable (offline or network error).');
+      return;
     }
+    if (!res.ok) {
+      showStaplesFallback(q, res.status === 429
+        ? 'USDA search limit reached, try again in a few minutes.'
+        : `USDA search failed (HTTP ${res.status}).`);
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    const mapped = (data.foods || []).map(item => {
+      const getN = (id) => {
+        const n = (item.foodNutrients || []).find(x => x.nutrientId === id);
+        return n ? Math.round(n.value) : 0;
+      };
+      const servingTxt = item.servingSize ? `${Math.round(item.servingSize)}${item.servingSizeUnit || 'g'}` : '100g standard';
+      return {
+        name: item.description,
+        brand: item.brandOwner || item.dataType || 'USDA Verified',
+        serving: servingTxt,
+        cal: getN(1008),
+        pro: getN(1003),
+        carb: getN(1005),
+        fat: getN(1004),
+        fib: getN(1079)
+      };
+    });
+    if (mapped.length) renderFoodList(mapped);
+    else showStaplesFallback(q, `No USDA results for "${q}".`);
   }
 
   function renderAll() {
