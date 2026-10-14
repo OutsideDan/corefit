@@ -1,198 +1,810 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#F2EDE4">
-<title>Personal Webapp Template</title>
+<meta name="theme-color" content="#090d16">
+<title>CoreFit</title>
 
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://www.gstatic.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://cdn.tailwindcss.com">
 
+<!-- Tailwind play CDN is left render-blocking on purpose: deferring it flashes unstyled markup -->
+<script src="https://cdn.tailwindcss.com/3.4.5"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
 
 <style>
   :root {
-    --bg:    #F2EDE4;
-    --ink:   #1E1E1B;
-    --rule:  rgba(0,0,0,0.12);
-    --accent:#2C3B2D;
-    --error: #B05E3A;
+    --bg:     #090d16;
+    --ink:    #f8fafc;
+    --card:   #131c2e;
+    --rule:   #1e293b;
+    --field:  #0f172a;
+    --border: #334155;
+    --accent: #10b981;
   }
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'DM Sans', system-ui, sans-serif;
-    font-weight: 300;
-    background: var(--bg);
-    color: var(--ink);
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-  }
-  .card {
-    width: 100%;
-    max-width: 360px;
-    background: white;
-    border: 1px solid var(--rule);
-    border-radius: 12px;
-    padding: 28px;
-  }
-  h1 { font-size: 22px; font-weight: 500; margin-bottom: 18px; }
-  label { display: block; font-size: 13px; margin: 12px 0 4px; }
-  input {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid var(--rule);
-    border-radius: 6px;
-    font: inherit;
-    background: var(--bg);
-  }
-  button {
-    width: 100%;
-    padding: 11px;
-    margin-top: 16px;
-    background: var(--accent);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font: inherit;
-    font-weight: 500;
-    cursor: pointer;
-  }
-  button.secondary { background: transparent; color: var(--accent); margin-top: 8px; }
-  .error { color: var(--error); font-size: 13px; min-height: 18px; margin-top: 10px; }
+  body { background-color: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+  .card { background: var(--card); border: 1px solid var(--rule); border-radius: 1rem; }
+  input, select { background: var(--field); border: 1px solid var(--border); color: var(--ink); border-radius: 0.5rem; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
   .hidden { display: none !important; }
-  main#app { width: 100%; max-width: 600px; padding: 20px; text-align: center; }
-  main#app .greeting { font-size: 18px; margin-bottom: 12px; }
-  main#app .placeholder { color: rgba(0,0,0,0.5); font-style: italic; }
 </style>
 </head>
-<body>
+<body class="min-h-screen pb-12">
 
-<div id="login" class="card">
-  <h1>Sign in</h1>
-  <label for="username">Username</label>
-  <input type="text" id="username" autocomplete="username" placeholder="your nickname">
-  <label for="pin">PIN</label>
-  <input type="password" id="pin" maxlength="8" autocomplete="current-password" placeholder="4–8 digits">
-  <div id="loginError" class="error"></div>
-  <button type="button" id="loginBtn">Log In</button>
-  <button type="button" id="createBtn" class="secondary">Create Account</button>
-</div>
+  <!-- SIGN-IN GATE -->
+  <div id="login" class="min-h-screen flex items-center justify-center px-4">
+    <div class="card p-7 w-full max-w-sm space-y-4 text-center">
+      <div class="w-12 h-12 mx-auto rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold">CF</div>
+      <h1 class="text-lg font-bold">CoreFit</h1>
+      <p class="text-sm text-slate-400">Sign in to sync your log between phone and computer.</p>
+      <button type="button" id="signInBtn" class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2.5 rounded-lg text-sm">Sign in with Google</button>
+      <p id="loginError" class="text-xs text-rose-400 min-h-[1rem]"></p>
+    </div>
+  </div>
 
-<main id="app" class="hidden">
-  <div class="greeting">Signed in as <span id="userLabel"></span></div>
-  <p class="placeholder">Your app goes here.</p>
-  <button type="button" id="logoutBtn" class="secondary" style="max-width:200px; margin:20px auto 0;">Switch Account</button>
-</main>
+  <div id="app" class="hidden">
+  <!-- STICKY REAL-TIME MACRO DASHBOARD -->
+  <div class="sticky top-0 z-50 bg-[#090d16]/95 backdrop-blur-md border-b border-slate-800 shadow-xl px-4 py-3">
+    <div class="max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 shrink-0 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold text-sm">CF</div>
+          <div class="min-w-0">
+            <h1 class="text-sm font-bold leading-tight">CoreFit <span id="syncStatus" class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">Connecting…</span></h1>
+            <p id="remainingSummary" class="text-xs text-emerald-400 font-medium">Calculating remaining targets...</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800 lg:ml-6">
+          <button type="button" onclick="changeDate(-1)" aria-label="Previous day" class="px-1.5 text-xs hover:text-emerald-400">◀</button>
+          <label for="datePicker" class="sr-only">Date</label>
+          <input type="date" id="datePicker" onchange="switchDate(this.value)" class="bg-transparent border-0 text-xs font-medium" />
+          <button type="button" onclick="changeDate(1)" aria-label="Next day" class="px-1.5 text-xs hover:text-emerald-400">▶</button>
+          <button type="button" onclick="goToday()" class="text-[11px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded ml-1">Today</button>
+        </div>
+      </div>
+
+      <!-- Live Macro Bars -->
+      <div class="grid grid-cols-5 gap-2 sm:gap-3 flex-1 max-w-3xl">
+        <div class="bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
+          <div class="text-[10px] text-slate-400 uppercase">Calories</div>
+          <div class="text-sm font-extrabold"><span id="curCals">0</span><span class="text-[11px] font-normal text-slate-500">/<span id="tarCals">0</span></span></div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full mt-1 overflow-hidden"><div id="barCals" class="bg-emerald-400 h-full w-0"></div></div>
+        </div>
+        <div class="bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
+          <div class="text-[10px] text-slate-400 uppercase">Protein</div>
+          <div class="text-sm font-extrabold text-emerald-400"><span id="curPro">0</span><span class="text-[11px] font-normal text-slate-500">/<span id="tarPro">0</span>g</span></div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full mt-1 overflow-hidden"><div id="barPro" class="bg-emerald-500 h-full w-0"></div></div>
+        </div>
+        <div class="bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
+          <div class="text-[10px] text-slate-400 uppercase">Carbs</div>
+          <div class="text-sm font-extrabold text-amber-400"><span id="curCarb">0</span><span class="text-[11px] font-normal text-slate-500">/<span id="tarCarb">0</span>g</span></div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full mt-1 overflow-hidden"><div id="barCarb" class="bg-amber-400 h-full w-0"></div></div>
+        </div>
+        <div class="bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
+          <div class="text-[10px] text-slate-400 uppercase">Fat</div>
+          <div class="text-sm font-extrabold text-rose-400"><span id="curFat">0</span><span class="text-[11px] font-normal text-slate-500">/<span id="tarFat">0</span>g</span></div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full mt-1 overflow-hidden"><div id="barFat" class="bg-rose-400 h-full w-0"></div></div>
+        </div>
+        <div class="bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
+          <div class="text-[10px] text-slate-400 uppercase">Fiber</div>
+          <div class="text-sm font-extrabold text-purple-400"><span id="curFib">0</span><span class="text-[11px] font-normal text-slate-500">/30g</span></div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full mt-1 overflow-hidden"><div id="barFib" class="bg-purple-400 h-full w-0"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="max-w-7xl mx-auto px-4 md:px-6 pt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- Left Column: Biometrics & Visceral Scorecard -->
+    <div class="lg:col-span-4 space-y-6">
+      <section class="card p-5 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <h2 class="font-bold text-base">1. Biometrics & Targets</h2>
+          <span id="profileStatus" class="text-xs text-emerald-400 font-medium">✓ Synced</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="bioSex" class="text-[11px] uppercase text-slate-400 font-semibold">Biological Sex</label>
+            <select id="bioSex" onchange="updateBiometrics()" class="w-full mt-1 px-3 py-2 text-sm">
+              <option value="male">♂ Male</option>
+              <option value="female">♀ Female</option>
+            </select>
+          </div>
+          <div>
+            <label for="bioAge" class="text-[11px] uppercase text-slate-400 font-semibold">Age</label>
+            <input type="number" id="bioAge" oninput="updateBiometrics()" class="w-full mt-1 px-3 py-2 text-sm font-semibold" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="bioWeight" class="text-[11px] uppercase text-slate-400 font-semibold">Base Weight (lbs)</label>
+            <input type="number" id="bioWeight" step="0.5" oninput="updateBiometrics()" class="w-full mt-1 px-3 py-2 text-sm font-semibold" />
+          </div>
+          <div>
+            <span class="text-[11px] uppercase text-slate-400 font-semibold">Height (ft / in)</span>
+            <div class="grid grid-cols-2 gap-2 mt-1">
+              <label for="bioFeet" class="sr-only">Height feet</label>
+              <input type="number" id="bioFeet" oninput="updateBiometrics()" class="w-full px-3 py-2 text-sm font-semibold" />
+              <label for="bioInches" class="sr-only">Height inches</label>
+              <input type="number" id="bioInches" oninput="updateBiometrics()" class="w-full px-3 py-2 text-sm font-semibold" />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label for="bioActivity" class="text-[11px] uppercase text-slate-400 font-semibold">Weekly Activity Level</label>
+          <select id="bioActivity" onchange="updateBiometrics()" class="w-full mt-1 px-3 py-2 text-sm">
+            <option value="1.2">Sedentary (Desk job)</option>
+            <option value="1.375">Lightly Active (1–3 light workouts / 7k steps)</option>
+            <option value="1.55">Moderately Active (3–5 workouts)</option>
+            <option value="1.725">Very Active (6–7 intense sessions)</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="bioGoal" class="text-[11px] uppercase text-slate-400 font-semibold">Goal Preset</label>
+          <select id="bioGoal" onchange="updateBiometrics()" class="w-full mt-1 px-3 py-2 text-sm">
+            <option value="0.80">Visceral / Stomach Fat Cut (-20% Deficit)</option>
+            <option value="0.88">Body Recomposition / Lean Fitness (-12% Deficit)</option>
+            <option value="1.0">Athletic Maintenance (100% TDEE)</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- Visceral Fat Scorecard -->
+      <section class="card p-5 space-y-3">
+        <h2 class="font-bold text-base">2. Visceral Fat Loss Scorecard</h2>
+        <div id="scorecardList" class="space-y-2 text-xs"></div>
+        <div class="pt-2 border-t border-slate-800 flex items-center justify-between">
+          <span class="text-xs text-slate-400">Daily Hydration:</span>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="addWater(-8)" class="px-2 py-1 bg-slate-800 rounded text-xs">-8 oz</button>
+            <span id="waterDisplay" class="font-bold text-sm text-sky-400">0 / 88 oz</span>
+            <button type="button" onclick="addWater(8)" class="px-2 py-1 bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded text-xs">+8 oz</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Account + one-time import of pre-sync data -->
+      <section class="card p-5 space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="font-bold text-base">Account</h2>
+          <button type="button" id="signOutBtn" class="text-xs text-slate-400 hover:text-rose-400 underline">Sign out</button>
+        </div>
+        <p class="text-xs text-slate-400">Signed in as <span id="userLabel" class="text-slate-200"></span></p>
+        <details id="importPanel" class="border-t border-slate-800 pt-3">
+          <summary class="text-sm font-semibold cursor-pointer">Import data from before sync</summary>
+          <div class="space-y-3 pt-3 text-xs text-slate-300">
+            <p>Run once on each device. Importing twice never duplicates entries, and your old data is left untouched as a backup.</p>
+            <button type="button" id="importLocalBtn" class="w-full bg-slate-800 hover:bg-slate-700 font-semibold py-2 rounded-lg">Scan this browser's saved data</button>
+            <label for="importFile" class="block font-semibold">Or choose a CoreFit backup file (.json)</label>
+            <input type="file" id="importFile" accept=".json,application/json" class="w-full text-xs p-2" />
+            <div id="importSummary" class="hidden bg-slate-900 border border-slate-800 rounded-lg p-3 space-y-2">
+              <p id="importSummaryText"></p>
+              <button type="button" id="importConfirmBtn" class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2 rounded-lg">Import and verify</button>
+            </div>
+            <p id="importResult" class="min-h-[1rem]"></p>
+          </div>
+        </details>
+      </section>
+    </div>
+
+    <!-- Right Column: Smart Vegetarian Suggestions & Meal Log -->
+    <div class="lg:col-span-8 space-y-6">
+
+      <!-- Smart Vegetarian Goal-Closing Suggestions -->
+      <section class="card p-5 space-y-3 border-emerald-500/30">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="font-bold text-base text-emerald-400 flex items-center gap-2">
+              🌱 Suggested Vegetarian Foods to Reach Today's Goals
+            </h2>
+            <p id="suggestionReason" class="text-xs text-slate-400">Ranked by your remaining Protein, Fiber, and Calorie gaps.</p>
+          </div>
+          <label for="mealSlotSelect" class="sr-only">Meal to log to</label>
+          <select id="mealSlotSelect" class="px-3 py-1.5 text-xs font-semibold bg-slate-900 border border-emerald-500/40 text-emerald-300">
+            <option value="Breakfast">Logging to: Breakfast</option>
+            <option value="Lunch">Logging to: Lunch</option>
+            <option value="Dinner">Logging to: Dinner</option>
+            <option value="Snacks">Logging to: Snacks</option>
+          </select>
+        </div>
+        <div id="smartSuggestions" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+      </section>
+
+      <!-- Food Search -->
+      <section class="card p-5 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="font-bold text-base">3. Search Foods (Vegetarian Staples & USDA)</h2>
+          <button type="button" onclick="renderFoodList(STAPLES)" class="text-xs text-slate-400 hover:text-emerald-400 underline">Reset to Vegetarian Staples</button>
+        </div>
+
+        <div class="flex gap-2">
+          <label for="usdaQuery" class="sr-only">Search USDA foods</label>
+          <input type="text" id="usdaQuery" placeholder="Search USDA (e.g., 'tofu', 'tempeh', 'lentils', 'greek yogurt', 'edamame')..." class="flex-1 px-3.5 py-2.5 text-sm" onkeydown="if(event.key==='Enter') searchUSDA()" />
+          <button type="button" onclick="searchUSDA()" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-5 py-2.5 rounded-lg text-sm">
+            Search USDA
+          </button>
+        </div>
+
+        <div id="foodResults" class="space-y-2.5 max-h-[420px] overflow-y-auto pr-1"></div>
+      </section>
+
+      <!-- Daily Meal Slots -->
+      <section class="grid grid-cols-1 md:grid-cols-2 gap-4" id="mealSlotsContainer"></section>
+    </div>
+  </div>
+  </div>
 
 <script>
   // ═════════════════════════════════════════════════════════════════════════════
-  // Stack constants (personal-webapp-template)
+  // Stack constants (personal-webapp-template, CoreFit variant)
+  // CoreFit uses Firebase Auth (Google) instead of the template's PIN login,
+  // because Firestore rules scope corefit/{uid}/** to request.auth.uid.
   // ═════════════════════════════════════════════════════════════════════════════
-  const FIREBASE_PROJECT = 'sendit-67c81';
-  const ACCOUNTS_COLL    = 'accounts';        // doc id = lowercased username
-  // PIN hashing matches SendIt: SHA-256 of the raw PIN, hex string.
+  const FIREBASE_PROJECT   = 'sendit-67c81';
+  const COREFIT_COLL       = 'corefit';   // corefit/{uid}: profile; /days/{date}: water; /items/{id}: logged foods
+  const LEGACY_STORAGE_KEY = 'DAN_COREFIT_PERMANENT_V2';  // pre-sync localStorage data; read-only, import source
+  const SLOTS              = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 
   const firebaseConfig = {
     apiKey:            "AIzaSyAgMOSs7_6C6ZSAuqgRtsR8pXeXnEkwlwA",
     authDomain:        "sendit-67c81.firebaseapp.com",
-    projectId:         "sendit-67c81",
+    projectId:         FIREBASE_PROJECT,
     storageBucket:     "sendit-67c81.firebasestorage.app",
     messagingSenderId: "710942811721",
     appId:             "1:710942811721:web:74493e7bd850403eedc198"
   };
 
-  let db = null;
-  let currentUser = null;
+  const DEFAULT_PROFILE = {
+    sex: 'male', age: 44, weight: 176, feet: 5, inches: 8,
+    activity: 1.375, goal: 0.88, proteinFactor: 1.0
+  };
 
-  // ── Auth helpers ────────────────────────────────────────────────────────────
-  async function hashPin(pin) {
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  const STAPLES = [
+    { name: "Fage Total 0% Nonfat Greek Yogurt", brand: "Fage", serving: "1 cup (225g)", cal: 130, pro: 23, carb: 7, fat: 0, fib: 0, tag: "Pure Protein" },
+    { name: "Whey Isolate Protein Shake", brand: "1 Scoop Isolate", serving: "1 scoop (32g)", cal: 120, pro: 25, carb: 2, fat: 1, fib: 0, tag: "Fast Protein" },
+    { name: "Organic Firm Tofu (Pan-seared or baked)", brand: "USDA Plant Protein", serving: "1 cup (150g)", cal: 144, pro: 18, carb: 3, fat: 8, fib: 2, tag: "Plant Protein" },
+    { name: "Black Beans or Lentils (Cooked)", brand: "USDA Legume", serving: "1 cup (172g)", cal: 230, pro: 16, carb: 40, fat: 1, fib: 15, tag: "Visceral Fiber + Protein" },
+    { name: "Shelled Edamame (Steamed)", brand: "USDA Plant Protein", serving: "1 cup (155g)", cal: 188, pro: 18, carb: 15, fat: 8, fib: 8, tag: "High Protein Bean" },
+    { name: "Egg White Omelet (1 cup whites + 1 whole egg)", brand: "USDA Egg", serving: "300g cooked", cal: 195, pro: 32, carb: 2, fat: 5, fib: 0, tag: "Lean Volume Protein" },
+    { name: "Fresh Raspberries or Blackberries", brand: "USDA Produce", serving: "1.5 cups (185g)", cal: 95, pro: 2, carb: 21, fat: 1, fib: 12, tag: "Low-Cal Fiber" },
+    { name: "Chia Seeds (Soluble Fiber Boost)", brand: "USDA Whole Food", serving: "2 tbsp (28g)", cal: 138, pro: 5, carb: 12, fat: 9, fib: 10, tag: "Soluble Fiber" },
+    { name: "Rolled Oats + Blueberries", brand: "Quaker / USDA", serving: "1/2 cup dry + 1/2 cup berries", cal: 210, pro: 7, carb: 39, fat: 3, fib: 6, tag: "Beta-Glucan Fiber" },
+    { name: "Avocado (Medium Half)", brand: "USDA Produce", serving: "1/2 fruit (100g)", cal: 160, pro: 2, carb: 9, fat: 15, fib: 7, tag: "Healthy Fats + Fiber" },
+    { name: "Hemp Hearts / Shelled Hemp Seeds", brand: "Manitoba Harvest", serving: "3 tbsp (30g)", cal: 166, pro: 10, carb: 2, fat: 15, fib: 1, tag: "Plant Omega-3 & Protein" }
+  ];
+
+  // Local calendar date. The Gemini build used toISOString(), which is UTC and
+  // rolled evening logs over to tomorrow in US time zones.
+  function localDateStr(d = new Date()) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  const todayStr = localDateStr();
+
+  let db = null, auth = null, uid = null;
+  let unsubItems = null, unsubDay = null, unsubProfile = null;
+  let profileSaveTimer = null;
+  let shownFoods = [], shownSuggestions = [];
+  let pendingImport = null;
+
+  // items: logged foods for currentDate, each { id, slot, name, cal, pro, carb, fat, fib, createdAt }
+  let state = { profile: { ...DEFAULT_PROFILE }, currentDate: todayStr, items: [], water: 0 };
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function num(v) { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : 0; }
+  function hash(str) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return (h >>> 0).toString(16).padStart(8, '0');
   }
 
-  async function createAccount(username, pin) {
-    const clean = username.trim().toLowerCase();
-    if (!/^[a-z0-9_-]{2,20}$/.test(clean)) throw new Error("Username: 2–20 chars, letters/numbers/- or _ only");
-    if (!/^\d{4,8}$/.test(pin))            throw new Error("PIN must be 4–8 digits");
-    const docRef   = db.collection(ACCOUNTS_COLL).doc(clean);
-    const existing = await docRef.get();
-    if (existing.exists) throw new Error("That username is taken — try another");
-    const pinHash = await hashPin(pin);
-    await docRef.set({ pinHash, createdAt: new Date().toISOString() });
-    currentUser = { username: clean };
-    showApp();
+  const userRef  = () => db.collection(COREFIT_COLL).doc(uid);
+  const itemsRef = () => userRef().collection('items');
+  const dayRef   = (d) => userRef().collection('days').doc(d);
+
+  function setSync(text, tone) {
+    const el = document.getElementById('syncStatus');
+    el.textContent = text;
+    el.className = 'ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ' + ({
+      ok:   'bg-emerald-500/20 text-emerald-300',
+      wait: 'bg-amber-500/20 text-amber-300',
+      bad:  'bg-rose-500/20 text-rose-300'
+    }[tone] || 'bg-slate-800 text-slate-400');
+  }
+  function syncFromMeta(meta) {
+    if (meta.hasPendingWrites) setSync(navigator.onLine ? 'Saving…' : 'Offline, will sync', 'wait');
+    else if (meta.fromCache)   setSync(navigator.onLine ? 'Connecting…' : 'Offline', 'wait');
+    else                       setSync('Synced', 'ok');
+  }
+  function onSyncError(e) {
+    setSync('Sync error', 'bad');
+    console.error('CoreFit sync error', e);
   }
 
-  async function loginAccount(username, pin) {
-    const clean = username.trim().toLowerCase();
-    if (!clean) throw new Error("Enter your username");
-    if (!pin)   throw new Error("Enter your PIN");
-    const docRef = db.collection(ACCOUNTS_COLL).doc(clean);
-    const doc    = await docRef.get();
-    if (!doc.exists) throw new Error("Account not found");
-    const pinHash = await hashPin(pin);
-    if (pinHash !== doc.data().pinHash) throw new Error("Wrong PIN");
-    currentUser = { username: clean };
-    showApp();
+  // ── Live listeners ────────────────────────────────────────────────────────────
+  function subscribeDate(d) {
+    if (unsubItems) unsubItems();
+    if (unsubDay) unsubDay();
+    state.items = []; state.water = 0;
+    renderAll();
+    unsubItems = itemsRef().where('date', '==', d).onSnapshot({ includeMetadataChanges: true }, snap => {
+      state.items = snap.docs.map(x => ({ id: x.id, ...x.data() })).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      syncFromMeta(snap.metadata);
+      renderAll();
+    }, onSyncError);
+    unsubDay = dayRef(d).onSnapshot(snap => {
+      state.water = Math.max(0, num(snap.data()?.water));
+      renderAll();
+    }, onSyncError);
   }
 
-  // ── UI ──────────────────────────────────────────────────────────────────────
-  function showApp() {
+  function subscribeProfile() {
+    unsubProfile = userRef().onSnapshot(snap => {
+      const editing = document.activeElement && document.activeElement.id?.startsWith('bio');
+      if (snap.metadata.hasPendingWrites || editing) return;
+      const saved = snap.data()?.profile;
+      state.profile = { ...DEFAULT_PROFILE, ...(saved || {}) };
+      document.getElementById('profileStatus').textContent = saved ? '✓ Synced' : 'Defaults (not saved yet)';
+      populateBiometricInputs();
+      renderAll();
+    }, onSyncError);
+  }
+
+  function stopListeners() {
+    [unsubItems, unsubDay, unsubProfile].forEach(fn => fn && fn());
+    unsubItems = unsubDay = unsubProfile = null;
+  }
+
+  // ── Profile ───────────────────────────────────────────────────────────────────
+  function populateBiometricInputs() {
+    const p = state.profile;
+    document.getElementById('bioSex').value = p.sex;
+    document.getElementById('bioAge').value = p.age;
+    document.getElementById('bioWeight').value = p.weight;
+    document.getElementById('bioFeet').value = p.feet;
+    document.getElementById('bioInches').value = p.inches;
+    document.getElementById('bioActivity').value = String(p.activity);
+    document.getElementById('bioGoal').value = p.goal === 1 ? '1.0' : String(p.goal);
+    document.getElementById('datePicker').value = state.currentDate;
+  }
+
+  function updateBiometrics() {
+    state.profile = {
+      sex: document.getElementById('bioSex').value,
+      age: Number(document.getElementById('bioAge').value) || 44,
+      weight: Number(document.getElementById('bioWeight').value) || 176,
+      feet: Number(document.getElementById('bioFeet').value) || 5,
+      inches: Number(document.getElementById('bioInches').value) || 8,
+      activity: Number(document.getElementById('bioActivity').value) || 1.375,
+      goal: Number(document.getElementById('bioGoal').value) || 0.88,
+      proteinFactor: 1.0
+    };
+    renderAll();
+    // Debounced so typing a weight doesn't write on every keystroke
+    clearTimeout(profileSaveTimer);
+    document.getElementById('profileStatus').textContent = 'Saving…';
+    profileSaveTimer = setTimeout(() => {
+      userRef().set({ profile: state.profile, updatedAt: Date.now() }, { merge: true })
+        .then(() => { document.getElementById('profileStatus').textContent = '✓ Synced'; })
+        .catch(onSyncError);
+    }, 700);
+  }
+
+  function getTargets() {
+    const p = state.profile;
+    const kg = p.weight * 0.45359237;
+    const cm = ((p.feet * 12) + p.inches) * 2.54;
+    const bmr = Math.round((10 * kg) + (6.25 * cm) - (5 * p.age) + (p.sex === 'male' ? 5 : -161));
+    const tdee = Math.round(bmr * p.activity);
+    const targetCals = Math.round(tdee * p.goal);
+    const targetPro = Math.round(p.weight * 1.0);
+    const targetFat = Math.round((targetCals * 0.27) / 9);
+    const targetCarb = Math.max(40, Math.round((targetCals - (targetPro * 4) - (targetFat * 9)) / 4));
+    const waterGoal = Math.round(p.weight * 0.5);
+    return { bmr, tdee, targetCals, targetPro, targetCarb, targetFat, waterGoal };
+  }
+
+  // ── Logging ───────────────────────────────────────────────────────────────────
+  // Writes aren't awaited: offline, the promise only settles on reconnect, while
+  // the local cache updates the listener immediately.
+  function addFoodItem(item, mult = 1) {
+    const slot = document.getElementById('mealSlotSelect').value;
+    itemsRef().add({
+      date: state.currentDate,
+      slot,
+      name: mult !== 1 ? `${item.name} (${mult}x)` : item.name,
+      cal: num(item.cal * mult),
+      pro: num(item.pro * mult),
+      carb: num(item.carb * mult),
+      fat: num(item.fat * mult),
+      fib: num((item.fib || 0) * mult),
+      createdAt: Date.now()
+    }).catch(onSyncError);
+  }
+
+  function addShownFood(idx) {
+    const mult = Number(document.getElementById(`mult_${idx}`)?.value || 1);
+    addFoodItem(shownFoods[idx], mult);
+  }
+
+  function removeFood(id) {
+    itemsRef().doc(id).delete().catch(onSyncError);
+  }
+
+  function addWater(oz) {
+    if (oz < 0 && state.water <= 0) return;
+    // increment() merges concurrent changes from both devices instead of overwriting
+    dayRef(state.currentDate).set({ water: firebase.firestore.FieldValue.increment(oz) }, { merge: true }).catch(onSyncError);
+  }
+
+  // ── Rendering ─────────────────────────────────────────────────────────────────
+  function renderSmartSuggestions(totals, targets) {
+    const remCal = Math.max(0, targets.targetCals - totals.cal);
+    const remPro = Math.max(0, targets.targetPro - totals.pro);
+    const remFib = Math.max(0, 30 - totals.fib);
+
+    document.getElementById('remainingSummary').textContent =
+      `Remaining Today: ${Math.round(remCal)} kcal • ${Math.round(remPro)}g Protein • ${Math.round(remFib)}g Fiber needed`;
+
+    shownSuggestions = STAPLES.map(f => {
+      let score = 0;
+      if (remPro > 25) score += (f.pro * 3) - (f.fat * 1.5);
+      if (remFib > 8) score += (f.fib * 4.5);
+      if (remCal < 350 && f.cal > remCal + 50) score -= 100;
+      return { ...f, score };
+    }).sort((a, b) => b.score - a.score).slice(0, 4);
+
+    let reason;
+    if (remPro >= 30 && remFib >= 10) {
+      reason = `You still need ${Math.round(remPro)}g protein and ${Math.round(remFib)}g fiber. Here are the best vegetarian whole foods to close the gap:`;
+    } else if (remPro >= 20) {
+      reason = `Focus on high-protein vegetarian options (Greek yogurt, tofu, edamame, protein powder) to close your ${Math.round(remPro)}g protein gap:`;
+    } else if (remFib >= 6) {
+      reason = `Protein is on track! Add soluble fiber (${Math.round(remFib)}g left from legumes, chia, or berries) to hit the visceral fat reduction target:`;
+    } else {
+      reason = `Daily vegetarian macro pillars hit! Keep any remaining snacks light and hydrating:`;
+    }
+
+    document.getElementById('suggestionReason').textContent = reason;
+    document.getElementById('smartSuggestions').innerHTML = shownSuggestions.map((f, idx) => `
+      <div class="bg-slate-900/90 border border-emerald-500/30 rounded-xl p-3 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <span class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">${esc(f.tag)}</span>
+          <div class="text-sm font-bold text-slate-100 mt-1 break-words">${esc(f.name)}</div>
+          <div class="text-xs text-slate-400 mt-0.5">
+            <strong class="text-slate-200">${f.cal} kcal</strong> •
+            <span class="text-emerald-400 font-semibold">P: ${f.pro}g</span> •
+            <span class="text-amber-400">C: ${f.carb}g</span> •
+            <span class="text-rose-400">F: ${f.fat}g</span> •
+            <span class="text-purple-400 font-semibold">Fiber: ${f.fib}g</span>
+          </div>
+        </div>
+        <button type="button" onclick="addFoodItem(shownSuggestions[${idx}], 1)" class="shrink-0 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-3 py-2 rounded-lg">
+          + Log
+        </button>
+      </div>
+    `).join('');
+  }
+
+  function renderFoodList(list) {
+    shownFoods = list;
+    document.getElementById('foodResults').innerHTML = list.map((f, idx) => `
+      <div class="bg-slate-900 p-3.5 rounded-xl border border-slate-800 hover:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="space-y-1 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-sm font-bold text-slate-100">${esc(f.name)}</span>
+            ${f.brand ? `<span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300">${esc(f.brand)}</span>` : ''}
+            ${f.serving ? `<span class="text-xs text-slate-400">Serving: ${esc(f.serving)}</span>` : ''}
+          </div>
+          <div class="flex flex-wrap gap-2 pt-1 text-xs">
+            <span class="px-2 py-0.5 rounded bg-slate-800 text-white font-bold">${f.cal} kcal</span>
+            <span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-semibold">Protein: ${f.pro}g</span>
+            <span class="px-2 py-0.5 rounded bg-amber-500/15 text-amber-300">Carbs: ${f.carb}g</span>
+            <span class="px-2 py-0.5 rounded bg-rose-500/15 text-rose-300">Fat: ${f.fat}g</span>
+            <span class="px-2 py-0.5 rounded bg-purple-500/15 text-purple-300 font-semibold">Fiber: ${f.fib || 0}g</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <select id="mult_${idx}" aria-label="Portion multiplier" class="px-2 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded">
+            <option value="0.5">0.5x</option>
+            <option value="1" selected>1.0x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2.0x</option>
+          </select>
+          <button type="button" onclick="addShownFood(${idx})" class="bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500 hover:text-slate-950 font-bold text-xs px-3.5 py-2 rounded-lg">
+            + Add to Meal
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function searchUSDA() {
+    const q = document.getElementById('usdaQuery').value.trim();
+    if (!q) { renderFoodList(STAPLES); return; }
+    const container = document.getElementById('foodResults');
+    container.innerHTML = `<div class="text-sm text-slate-300 p-4">Searching live USDA database for "${esc(q)}"...</div>`;
+    try {
+      const res = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=DEMO_KEY&query=${encodeURIComponent(q)}&pageSize=12`);
+      const data = await res.json();
+      const mapped = (data.foods || []).map(item => {
+        const getN = (id) => {
+          const n = (item.foodNutrients || []).find(x => x.nutrientId === id);
+          return n ? Math.round(n.value) : 0;
+        };
+        const servingTxt = item.servingSize ? `${Math.round(item.servingSize)}${item.servingSizeUnit || 'g'}` : '100g standard';
+        return {
+          name: item.description,
+          brand: item.brandOwner || item.dataType || 'USDA Verified',
+          serving: servingTxt,
+          cal: getN(1008),
+          pro: getN(1003),
+          carb: getN(1005),
+          fat: getN(1004),
+          fib: getN(1079)
+        };
+      });
+      renderFoodList(mapped.length ? mapped : STAPLES);
+    } catch (e) {
+      renderFoodList(STAPLES);
+    }
+  }
+
+  function renderAll() {
+    const t = getTargets();
+    document.getElementById('tarCals').textContent = t.targetCals;
+    document.getElementById('tarPro').textContent = t.targetPro;
+    document.getElementById('tarCarb').textContent = t.targetCarb;
+    document.getElementById('tarFat').textContent = t.targetFat;
+
+    const totals = { cal: 0, pro: 0, carb: 0, fat: 0, fib: 0 };
+    state.items.forEach(i => {
+      totals.cal += i.cal; totals.pro += i.pro; totals.carb += i.carb; totals.fat += i.fat; totals.fib += i.fib || 0;
+    });
+
+    document.getElementById('curCals').textContent = Math.round(totals.cal);
+    document.getElementById('curPro').textContent = Math.round(totals.pro);
+    document.getElementById('curCarb').textContent = Math.round(totals.carb);
+    document.getElementById('curFat').textContent = Math.round(totals.fat);
+    document.getElementById('curFib').textContent = Math.round(totals.fib);
+
+    document.getElementById('barCals').style.width = `${Math.min(100, (totals.cal / t.targetCals) * 100)}%`;
+    document.getElementById('barPro').style.width = `${Math.min(100, (totals.pro / t.targetPro) * 100)}%`;
+    document.getElementById('barCarb').style.width = `${Math.min(100, (totals.carb / t.targetCarb) * 100)}%`;
+    document.getElementById('barFat').style.width = `${Math.min(100, (totals.fat / t.targetFat) * 100)}%`;
+    document.getElementById('barFib').style.width = `${Math.min(100, (totals.fib / 30) * 100)}%`;
+
+    document.getElementById('waterDisplay').textContent = `${state.water} / ${t.waterGoal} oz`;
+
+    renderSmartSuggestions(totals, t);
+
+    const checks = [
+      { label: `Calorie Deficit Window (${t.targetCals} kcal)`, pass: totals.cal > 1000 && totals.cal <= t.targetCals + 75 },
+      { label: `Protein Retention Floor (≥ ${Math.round(t.targetPro * 0.9)}g)`, pass: totals.pro >= t.targetPro * 0.9 },
+      { label: `Visceral Fiber Target (≥ 28g/day)`, pass: totals.fib >= 28 },
+      { label: `Hydration Target (≥ ${t.waterGoal} oz)`, pass: state.water >= t.waterGoal }
+    ];
+    document.getElementById('scorecardList').innerHTML = checks.map(c => `
+      <div class="flex items-center justify-between p-2 rounded-lg border ${c.pass ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-slate-900 border-slate-800 text-slate-400'}">
+        <span>${c.label}</span>
+        <span class="font-bold">${c.pass ? '✓ HIT' : 'Pending'}</span>
+      </div>
+    `).join('');
+
+    document.getElementById('mealSlotsContainer').innerHTML = SLOTS.map(slot => {
+      const items = state.items.filter(i => i.slot === slot);
+      const slotCal = Math.round(items.reduce((s, i) => s + i.cal, 0));
+      return `
+        <div class="card p-4 space-y-3">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+            <h3 class="font-bold text-sm">${slot}</h3>
+            <span class="text-xs text-emerald-400 font-semibold">${slotCal} kcal</span>
+          </div>
+          <div class="space-y-1.5">
+            ${items.length === 0 ? `<p class="text-xs text-slate-500 italic">No items logged.</p>` : items.map(it => `
+              <div class="flex justify-between items-center bg-slate-900 px-3 py-2 rounded-lg text-xs">
+                <div>
+                  <div class="font-semibold text-slate-200">${esc(it.name)}</div>
+                  <div class="text-[11px] text-slate-400">${it.cal} kcal • P:${it.pro}g • C:${it.carb}g • F:${it.fat}g • Fib:${it.fib || 0}g</div>
+                </div>
+                <button type="button" onclick="removeFood('${esc(it.id)}')" aria-label="Remove item" class="text-slate-500 hover:text-rose-400 px-2">✕</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function switchDate(val) {
+    if (!val) return;
+    state.currentDate = val;
+    document.getElementById('datePicker').value = val;
+    subscribeDate(val);
+  }
+  function changeDate(delta) {
+    const d = new Date(state.currentDate + 'T12:00:00');
+    d.setDate(d.getDate() + delta);
+    switchDate(localDateStr(d));
+  }
+  function goToday() { switchDate(localDateStr()); }
+
+  // ── Import (pre-sync localStorage data or a JSON backup) ──────────────────────
+  // Converts the legacy { profile, days: { date: { meals: {slot: [...]}, water } } }
+  // shape into records. Item IDs are deterministic (content hash + occurrence), so
+  // re-running an import, or importing the same item from both devices, never duplicates.
+  function legacyToRecords(data) {
+    const days = (data && typeof data.days === 'object' && data.days) || {};
+    const items = [], water = [];
+    for (const [date, day] of Object.entries(days)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      for (const slot of SLOTS) {
+        const seen = {};
+        (day?.meals?.[slot] || []).forEach(it => {
+          const rec = { date, slot, name: String(it?.name || 'Item'), cal: num(it?.cal), pro: num(it?.pro), carb: num(it?.carb), fat: num(it?.fat), fib: num(it?.fib) };
+          const h = hash(`${rec.name}|${rec.cal}|${rec.pro}|${rec.carb}|${rec.fat}|${rec.fib}`);
+          seen[h] = (seen[h] || 0) + 1;
+          items.push({ id: `imp_${date}_${slot}_${h}_${seen[h]}`, ...rec });
+        });
+      }
+      if (num(day?.water) > 0) water.push({ date, water: num(day.water) });
+    }
+    const profile = data && typeof data.profile === 'object' ? data.profile : null;
+    return { profile, items, water, dayCount: new Set([...items.map(i => i.date), ...water.map(w => w.date)]).size };
+  }
+
+  function stageImport(data, sourceLabel) {
+    const result = document.getElementById('importResult');
+    const recs = legacyToRecords(data);
+    if (!recs.items.length && !recs.water.length && !recs.profile) {
+      pendingImport = null;
+      document.getElementById('importSummary').classList.add('hidden');
+      result.textContent = `No CoreFit data found in ${sourceLabel}.`;
+      return;
+    }
+    pendingImport = recs;
+    result.textContent = '';
+    document.getElementById('importSummaryText').textContent =
+      `Found in ${sourceLabel}: ${recs.dayCount} day(s), ${recs.items.length} food entr${recs.items.length === 1 ? 'y' : 'ies'}, ` +
+      `${recs.water.length} day(s) with water${recs.profile ? ', and a saved profile' : ''}.`;
+    document.getElementById('importSummary').classList.remove('hidden');
+  }
+
+  async function runImport() {
+    const result = document.getElementById('importResult');
+    const recs = pendingImport;
+    if (!recs) return;
+    if (!navigator.onLine) { result.textContent = 'You are offline. Import needs a connection so it can verify the upload.'; return; }
+    const btn = document.getElementById('importConfirmBtn');
+    btn.disabled = true;
+    result.textContent = 'Importing…';
+    try {
+      for (let i = 0; i < recs.items.length; i += 400) {
+        const batch = db.batch();
+        recs.items.slice(i, i + 400).forEach(({ id, ...rec }) => {
+          batch.set(itemsRef().doc(id), { ...rec, imported: true, createdAt: 0 });
+        });
+        await batch.commit();
+      }
+      // Water: keep the higher value when both devices logged the same day
+      for (const w of recs.water) {
+        const snap = await dayRef(w.date).get({ source: 'server' });
+        if (num(snap.data()?.water) < w.water) await dayRef(w.date).set({ water: w.water }, { merge: true });
+      }
+      // Profile: the first import wins; later imports never overwrite a saved profile
+      let profileNote = '';
+      if (recs.profile) {
+        const snap = await userRef().get({ source: 'server' });
+        if (!snap.data()?.profile) {
+          await userRef().set({ profile: { ...DEFAULT_PROFILE, ...recs.profile }, updatedAt: Date.now() }, { merge: true });
+          profileNote = ' Profile imported.';
+        } else {
+          profileNote = ' Saved profile kept (already set).';
+        }
+      }
+
+      // Verify against the server, not the local cache
+      const onServer = await itemsRef().where('imported', '==', true).get({ source: 'server' });
+      const ids = new Set(onServer.docs.map(d => d.id));
+      const missing = recs.items.filter(i => !ids.has(i.id)).length;
+      let waterShort = 0;
+      for (const w of recs.water) {
+        const snap = await dayRef(w.date).get({ source: 'server' });
+        if (num(snap.data()?.water) < w.water) waterShort++;
+      }
+      if (missing || waterShort) {
+        result.textContent = `Verification FAILED: ${missing} of ${recs.items.length} food entries and ${waterShort} water day(s) are not on the server. Nothing was deleted; run the import again.`;
+        result.className = 'min-h-[1rem] text-rose-400';
+      } else {
+        result.textContent = `Verified: ${recs.items.length}/${recs.items.length} food entries and ${recs.water.length}/${recs.water.length} water days are on the server.${profileNote} Your old data was left in place.`;
+        result.className = 'min-h-[1rem] text-emerald-400';
+        document.getElementById('importSummary').classList.add('hidden');
+        pendingImport = null;
+        subscribeDate(state.currentDate);
+      }
+    } catch (e) {
+      result.textContent = `Import stopped: ${e.message || e}. Nothing was deleted; run it again.`;
+      result.className = 'min-h-[1rem] text-rose-400';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function bindImport() {
+    document.getElementById('importLocalBtn').addEventListener('click', () => {
+      let data = null;
+      try { data = JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) || 'null'); } catch (e) { data = null; }
+      stageImport(data, "this browser's saved data");
+    });
+    document.getElementById('importFile').addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try { stageImport(JSON.parse(await file.text()), file.name); }
+      catch (err) { document.getElementById('importResult').textContent = `${file.name} is not a valid CoreFit backup (could not read JSON).`; }
+    });
+    document.getElementById('importConfirmBtn').addEventListener('click', runImport);
+  }
+
+  // ── Auth + boot ───────────────────────────────────────────────────────────────
+  function showApp(user) {
     document.getElementById('login').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
-    document.getElementById('userLabel').textContent = currentUser.username;
+    document.getElementById('userLabel').textContent = user.email || user.displayName || 'Google account';
+    populateBiometricInputs();
+    renderFoodList(STAPLES);
+    subscribeProfile();
+    subscribeDate(state.currentDate);
   }
 
   function showLogin() {
-    currentUser = null;
+    stopListeners();
     document.getElementById('app').classList.add('hidden');
     document.getElementById('login').classList.remove('hidden');
-    document.getElementById('username').value = '';
-    document.getElementById('pin').value = '';
-    document.getElementById('loginError').textContent = '';
   }
 
-  function bindEvents() {
-    const errEl = document.getElementById('loginError');
-    const run = async (fn) => {
-      errEl.textContent = '';
-      try { await fn(); }
-      catch (e) { errEl.textContent = e.message || 'Something went wrong'; }
-    };
-    document.getElementById('loginBtn').addEventListener('click', () => run(() =>
-      loginAccount(document.getElementById('username').value, document.getElementById('pin').value)
-    ));
-    document.getElementById('createBtn').addEventListener('click', () => run(() =>
-      createAccount(document.getElementById('username').value, document.getElementById('pin').value)
-    ));
-    document.getElementById('pin').addEventListener('keydown', e => {
-      if (e.key === 'Enter') document.getElementById('loginBtn').click();
-    });
-    document.getElementById('logoutBtn').addEventListener('click', showLogin);
-  }
-
-  // ── Boot ────────────────────────────────────────────────────────────────────
   window.addEventListener('load', () => {
     if (typeof firebase === 'undefined') {
-      document.getElementById('loginError').textContent =
-        'Could not load Firebase. Check your internet connection and refresh.';
+      document.getElementById('loginError').textContent = 'Could not load Firebase. Check your internet connection and refresh.';
       return;
     }
     firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
     db = firebase.firestore();
-    bindEvents();
+    // Offline cache: logging works without a connection and syncs on reconnect.
+    // Must run before any other Firestore call. Fails harmlessly in private browsing.
+    db.enablePersistence({ synchronizeTabs: true }).catch(e => console.warn('Offline cache unavailable:', e.code));
+
+    document.getElementById('signInBtn').addEventListener('click', () => {
+      document.getElementById('loginError').textContent = '';
+      auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
+        .catch(e => { document.getElementById('loginError').textContent = e.message || 'Sign-in failed'; });
+    });
+    document.getElementById('signOutBtn').addEventListener('click', () => auth.signOut());
+    window.addEventListener('online',  () => setSync('Connecting…', 'wait'));
+    window.addEventListener('offline', () => setSync('Offline', 'wait'));
+    bindImport();
+
+    auth.onAuthStateChanged(user => {
+      if (user) { uid = user.uid; showApp(user); }
+      else      { uid = null; showLogin(); }
+    });
   });
 </script>
 

@@ -185,6 +185,27 @@ if (!scriptBlock) {
 //   pass(`localStorage keys match canonical set (${uniqueKeys.join(', ')})`);
 // }
 
+// CoreFit-specific: invariants the Firestore rules and the data migration depend on.
+// Rules scope corefit/{uid}/** to request.auth.uid; renaming the collection silently breaks sync.
+/const COREFIT_COLL\s*=\s*'corefit'/.test(scriptBlock)
+  ? pass('CoreFit collection constant is "corefit" (matches Firestore rules)')
+  : fail('COREFIT_COLL must be \'corefit\' — Firestore rules only allow corefit/{uid}/**');
+// The pre-sync localStorage data is an import source and the user's backup; never write it.
+/localStorage\.(setItem|removeItem|clear)\s*\(/.test(scriptBlock)
+  ? fail('Script writes to localStorage — legacy CoreFit data must stay read-only')
+  : pass('localStorage is read-only (legacy CoreFit data preserved)');
+/const LEGACY_STORAGE_KEY\s*=\s*'DAN_COREFIT_PERMANENT_V2'/.test(scriptBlock)
+  ? pass('localStorage legacy import key unchanged (DAN_COREFIT_PERMANENT_V2)')
+  : fail('LEGACY_STORAGE_KEY changed — import would no longer find pre-sync data');
+// UTC date bug from the Gemini build: toISOString() dates roll evening logs into tomorrow.
+/toISOString\(\)\.split\(/.test(scriptBlock)
+  ? fail('toISOString().split() used for a date in the script block — use localDateStr() (UTC rollover bug)')
+  : pass('Dates use local time (no toISOString() date syntax)');
+// Any HTML built from food names must go through esc(); USDA data is third-party.
+/\$\{(f|it)\.name\}/.test(scriptBlock)
+  ? fail('Unescaped food name interpolated into HTML — wrap in esc()')
+  : pass('Food names are escaped before rendering (esc)');
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // CSS HEALTH
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -246,7 +267,7 @@ const sections = [
   { title: 'Accessibility', filter: m => /label|button|title|lang|viewport/i.test(m) },
   { title: 'Performance',   filter: m => /\bKB\b|defer|async|preconnect hint|favicon.*files|icon.*files|icon.*present|files present/i.test(m) },
   { title: 'Integrity',     filter: m => /manifest\.json|CDN reachable|CDN returned|CDN unreachable|version pin/i.test(m) },
-  { title: 'Code quality',  filter: m => /syntax|localStorage|script block/i.test(m) },
+  { title: 'Code quality',  filter: m => /syntax|localStorage|script block|CoreFit|Dates use|toISOString|food name/i.test(m) },
   { title: 'CSS health',    filter: m => /CSS var|CSS variable|All \d+ themes define|variable set/i.test(m) },
   { title: 'Hygiene',       filter: m => /console|localhost/i.test(m) },
 ];

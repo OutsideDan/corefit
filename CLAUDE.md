@@ -1,11 +1,11 @@
-# CLAUDE.md — &lt;app name&gt;
+# CLAUDE.md — CoreFit
 
 This repo follows the **personal-webapp-template** pattern. Read `intent.md` and the SOP at `workbench/wiki/reference/personal-webapp-deploy.md` (Dan's local workbench) before making changes.
 
 ## Stack
 - Single-file static webapp, served from GitHub Pages (`main` branch root, no build step)
 - Firestore: project `sendit-67c81` (shared across all personal apps)
-- Auth: `accounts/{username}` doc with SHA-256-hashed PIN
+- Auth: **Firebase Auth (Google sign-in)**, not the template's PIN login. Data lives at `corefit/{uid}/**`, which Firestore rules lock to `request.auth.uid`. See `intent.md` for the data model
 - Constants are declared at the top of the inline `<script>` block in `index.html`
 
 ## Deploy
