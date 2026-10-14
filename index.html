@@ -677,6 +677,35 @@
     `).join('');
   }
 
+  // USDA reports Branded foods per 100 g or 100 ml, alongside a serving size. Scale to one
+  // serving when the unit is g or ml; otherwise stay per 100 and say so. (Unit-tested in tests/usda.test.js)
+  function mapUSDAFood(item) {
+    const values = {};
+    (item.foodNutrients || []).forEach(n => {
+      const v = Number(n.value ?? n.amount);
+      if (Number.isFinite(v)) values[n.nutrientId] = v;
+    });
+    const per100 = {
+      cal: values[1008] ?? values[2047] ?? values[2048] ?? 0,
+      pro: values[1003] ?? 0, carb: values[1005] ?? 0, fat: values[1004] ?? 0, fib: values[1079] ?? 0
+    };
+    const unit = { g: 'g', grm: 'g', ml: 'ml', mlt: 'ml' }[String(item.servingSizeUnit || '').toLowerCase()];
+    const size = Number(item.servingSize);
+    const scaled = unit && size > 0;
+    const factor = scaled ? size / 100 : 1;
+    const household = String(item.householdServingFullText || '').trim();
+    const serving = scaled
+      ? (household ? `${household} (${Math.round(size)} ${unit})` : `${Math.round(size)} ${unit}`)
+      : (item.dataType === 'Branded' ? '100 g/ml (no usable serving size)' : '100 g');
+    const r = (v) => Math.round(v * factor);
+    return {
+      name: item.description,
+      brand: item.brandOwner || item.dataType || 'USDA Verified',
+      serving,
+      cal: r(per100.cal), pro: r(per100.pro), carb: r(per100.carb), fat: r(per100.fat), fib: r(per100.fib)
+    };
+  }
+
   // Shows matching staples with a visible reason instead of failing silently
   function showStaplesFallback(q, why) {
     const local = searchStaples(q);
@@ -702,23 +731,7 @@
       return;
     }
     const data = await res.json().catch(() => ({}));
-    const mapped = (data.foods || []).map(item => {
-      const getN = (id) => {
-        const n = (item.foodNutrients || []).find(x => x.nutrientId === id);
-        return n ? Math.round(n.value) : 0;
-      };
-      const servingTxt = item.servingSize ? `${Math.round(item.servingSize)}${item.servingSizeUnit || 'g'}` : '100g standard';
-      return {
-        name: item.description,
-        brand: item.brandOwner || item.dataType || 'USDA Verified',
-        serving: servingTxt,
-        cal: getN(1008),
-        pro: getN(1003),
-        carb: getN(1005),
-        fat: getN(1004),
-        fib: getN(1079)
-      };
-    });
+    const mapped = (data.foods || []).map(mapUSDAFood);
     if (mapped.length) renderFoodList(mapped);
     else showStaplesFallback(q, `No USDA results for "${q}".`);
   }

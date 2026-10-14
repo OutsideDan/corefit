@@ -39,4 +39,5 @@
 | Quick add accepts bad input / typo warning wrong | `tests/quickadd.test.js` (run by pre-deploy) | 14 validation + warning cases |
 | Saved meal loses items or re-logs to wrong date/slot | `tests/quickadd.test.js` | save/re-log round-trip cases |
 | Meals stored outside `corefit/{uid}` | `scripts/pre-deploy.js` | fails unless `mealsRef = () => userRef().collection('meals')` |
+| USDA branded food under-counted (per-100 values shown as per serving) | `tests/usda.test.js` (run by pre-deploy) | real Gatorade + cottage cheese records must scale to 182 kcal/30 g and 70 kcal/12 g |
 | Another account reads data | Firestore rules | Rules Playground: other uid on `corefit/xyz` denied (verified 2026-10-14) |
