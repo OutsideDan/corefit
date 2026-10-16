@@ -223,6 +223,10 @@ for (const f of readdirSync(resolve(ROOT, 'tests')).filter(f => f.endsWith('.tes
     fail(`CoreFit unit tests failed (tests/${f}):\n${(e.stdout?.toString() || e.message).split('\n').filter(l => l.startsWith('FAIL') || l.includes('Error')).join('\n')}`);
   }
 }
+// My Foods must live under the signed-in user's path, or the rules block them
+/const foodsRef\s*=\s*\(\)\s*=>\s*userRef\(\)\.collection\('foods'\)/.test(scriptBlock)
+  ? pass('CoreFit My Foods stored under corefit/{uid}/foods')
+  : fail('CoreFit foodsRef must be userRef().collection(\'foods\') so Firestore rules allow it');
 // Saved meals must live under the signed-in user's path, or the rules block them
 /const mealsRef\s*=\s*\(\)\s*=>\s*userRef\(\)\.collection\('meals'\)/.test(scriptBlock)
   ? pass('CoreFit saved meals stored under corefit/{uid}/meals')

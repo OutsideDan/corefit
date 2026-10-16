@@ -225,6 +225,15 @@
         <div id="smartSuggestions" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
       </section>
 
+      <!-- My Foods: foods Dan created once from a label; log at any portion -->
+      <section class="card p-5 space-y-3">
+        <div>
+          <h2 class="font-bold text-base">My Foods</h2>
+          <p class="text-xs text-slate-400">Foods you saved from Quick add. They also show first in search and in suggestions.</p>
+        </div>
+        <div id="myFoods" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+      </section>
+
       <!-- Saved meals: one tap re-logs every item to the selected meal and date -->
       <section class="card p-5 space-y-3">
         <div>
@@ -250,18 +259,28 @@
         </div>
 
         <details id="quickAddPanel" class="bg-slate-900 border border-slate-800 rounded-xl p-3">
-          <summary class="text-sm font-semibold cursor-pointer">Quick add: enter your own food</summary>
+          <summary id="quickAddTitle" class="text-sm font-semibold cursor-pointer">Quick add: enter your own food</summary>
           <div class="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-3">
-            <div class="col-span-2 sm:col-span-6">
+            <div class="col-span-2 sm:col-span-4">
               <label for="qaName" class="text-[11px] uppercase text-slate-400 font-semibold">Food name</label>
-              <input type="text" id="qaName" maxlength="80" placeholder="e.g. Bean bowl" class="w-full mt-1 px-3 py-2 text-sm" />
+              <input type="text" id="qaName" maxlength="80" placeholder="e.g. Nurri protein shake" class="w-full mt-1 px-3 py-2 text-sm" />
+            </div>
+            <div class="col-span-2 sm:col-span-2">
+              <label for="qaServing" class="text-[11px] uppercase text-slate-400 font-semibold">Serving</label>
+              <input type="text" id="qaServing" maxlength="60" placeholder="e.g. 1 bottle (11 fl oz)" class="w-full mt-1 px-3 py-2 text-sm" />
             </div>
             <div><label for="qaCal" class="text-[11px] uppercase text-slate-400 font-semibold">kcal</label><input type="number" id="qaCal" min="0" inputmode="decimal" class="w-full mt-1 px-2 py-2 text-sm" /></div>
             <div><label for="qaPro" class="text-[11px] uppercase text-slate-400 font-semibold">Protein g</label><input type="number" id="qaPro" min="0" inputmode="decimal" class="w-full mt-1 px-2 py-2 text-sm" /></div>
             <div><label for="qaCarb" class="text-[11px] uppercase text-slate-400 font-semibold">Carbs g</label><input type="number" id="qaCarb" min="0" inputmode="decimal" class="w-full mt-1 px-2 py-2 text-sm" /></div>
             <div><label for="qaFat" class="text-[11px] uppercase text-slate-400 font-semibold">Fat g</label><input type="number" id="qaFat" min="0" inputmode="decimal" class="w-full mt-1 px-2 py-2 text-sm" /></div>
             <div><label for="qaFib" class="text-[11px] uppercase text-slate-400 font-semibold">Fiber g</label><input type="number" id="qaFib" min="0" inputmode="decimal" class="w-full mt-1 px-2 py-2 text-sm" /></div>
-            <div class="flex items-end"><button type="button" onclick="quickAdd()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs py-2.5 rounded-lg">+ Log</button></div>
+            <div class="flex items-end"><button type="button" id="quickAddBtn" onclick="quickAdd()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs py-2.5 rounded-lg">+ Log</button></div>
+          </div>
+          <div class="flex items-center justify-between gap-2 pt-2">
+            <label for="qaSave" id="qaSaveRow" class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+              <input type="checkbox" id="qaSave" checked class="w-4 h-4" /> Save to My Foods
+            </label>
+            <button type="button" id="quickAddCancel" onclick="exitFoodEdit()" class="hidden text-xs text-slate-400 hover:text-rose-400 underline">Cancel edit</button>
           </div>
           <p id="quickAddMsg" class="text-xs min-h-[1rem] pt-2"></p>
         </details>
@@ -325,14 +344,16 @@
   const todayStr = localDateStr();
 
   let db = null, auth = null, uid = null;
-  let unsubItems = null, unsubDay = null, unsubProfile = null, unsubMeals = null;
+  let unsubItems = null, unsubDay = null, unsubProfile = null, unsubMeals = null, unsubFoods = null;
+  let editingFoodId = null;
   let profileSaveTimer = null;
   let shownFoods = [], shownSuggestions = [];
   let pendingImport = null;
 
   // items: logged foods for currentDate, each { id, slot, name, cal, pro, carb, fat, fib, createdAt }
   // meals: saved meals, each { id, name, items: [{ name, cal, pro, carb, fat, fib }] }
-  let state = { profile: { ...DEFAULT_PROFILE }, currentDate: todayStr, items: [], water: 0, meals: [] };
+  // myFoods: foods saved from Quick add, each { id, name, serving, cal, pro, carb, fat, fib }
+  let state = { profile: { ...DEFAULT_PROFILE }, currentDate: todayStr, items: [], water: 0, meals: [], myFoods: [] };
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
   function esc(s) {
@@ -349,6 +370,7 @@
   const itemsRef = () => userRef().collection('items');
   const dayRef   = (d) => userRef().collection('days').doc(d);
   const mealsRef = () => userRef().collection('meals');
+  const foodsRef = () => userRef().collection('foods');
 
   function setSync(text, tone) {
     const el = document.getElementById('syncStatus');
@@ -398,6 +420,14 @@
     }, onSyncError);
   }
 
+  function subscribeFoods() {
+    unsubFoods = foodsRef().onSnapshot(snap => {
+      state.myFoods = snap.docs.map(x => ({ id: x.id, ...x.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      renderMyFoods();
+      renderAll();  // suggestions draw from My Foods
+    }, onSyncError);
+  }
+
   function subscribeMeals() {
     unsubMeals = mealsRef().onSnapshot(snap => {
       state.meals = snap.docs.map(x => ({ id: x.id, ...x.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name)));
@@ -406,8 +436,8 @@
   }
 
   function stopListeners() {
-    [unsubItems, unsubDay, unsubProfile, unsubMeals].forEach(fn => fn && fn());
-    unsubItems = unsubDay = unsubProfile = unsubMeals = null;
+    [unsubItems, unsubDay, unsubProfile, unsubMeals, unsubFoods].forEach(fn => fn && fn());
+    unsubItems = unsubDay = unsubProfile = unsubMeals = unsubFoods = null;
   }
 
   // ── Profile ───────────────────────────────────────────────────────────────────
@@ -464,17 +494,7 @@
   // the local cache updates the listener immediately.
   function addFoodItem(item, mult = 1) {
     const slot = document.getElementById('mealSlotSelect').value;
-    itemsRef().add({
-      date: state.currentDate,
-      slot,
-      name: mult !== 1 ? `${item.name} (${mult}x)` : item.name,
-      cal: num(item.cal * mult),
-      pro: num(item.pro * mult),
-      carb: num(item.carb * mult),
-      fat: num(item.fat * mult),
-      fib: num((item.fib || 0) * mult),
-      createdAt: Date.now()
-    }).catch(onSyncError);
+    itemsRef().add({ date: state.currentDate, slot, ...scaleFood(item, mult), createdAt: Date.now() }).catch(onSyncError);
   }
 
   function addShownFood(idx) {
@@ -527,15 +547,141 @@
     }));
   }
 
-  function quickAdd() {
+  // Pure functions for My Foods (unit-tested in tests/myfoods.test.js)
+  function buildFood(raw) {
+    const r = validateQuickAdd(raw);
+    if (!r.ok) return r;
+    const serving = String(raw.serving ?? '').trim().slice(0, 60) || '1 serving';
+    return { ...r, food: { ...r.item, serving } };
+  }
+
+  // Search order: My Foods first (badged), then staples
+  function localMatches(q, myFoods, staples) {
+    return [...matchFoods(q, myFoods).map(f => ({ ...f, brand: 'My Food' })), ...matchFoods(q, staples)];
+  }
+
+  // Returns a new object, so editing a saved food never changes entries already logged
+  function scaleFood(item, mult) {
+    const x = (v) => Math.round((Number(v) || 0) * mult);
+    return {
+      name: mult !== 1 ? `${item.name} (${mult}x)` : item.name,
+      cal: x(item.cal), pro: x(item.pro), carb: x(item.carb), fat: x(item.fat), fib: x(item.fib)
+    };
+  }
+
+  function findDuplicateFood(name, myFoods) {
+    const key = String(name ?? '').trim().toLowerCase();
+    return myFoods.find(f => String(f.name).trim().toLowerCase() === key) || null;
+  }
+
+  // Suggestions draw from My Foods plus staples; a saved food replaces a staple of the same name
+  function suggestionPool(myFoods, staples) {
+    const mine = myFoods.map(f => ({ ...f, tag: 'My Food' }));
+    const taken = new Set(mine.map(f => String(f.name).toLowerCase()));
+    return [...mine, ...staples.filter(f => !taken.has(f.name.toLowerCase()))];
+  }
+
+  const QA_FIELDS = ['qaName', 'qaServing', 'qaCal', 'qaPro', 'qaCarb', 'qaFat', 'qaFib'];
+  function readQuickAdd() {
     const v = (id) => document.getElementById(id).value;
+    return { name: v('qaName'), serving: v('qaServing'), cal: v('qaCal'), pro: v('qaPro'), carb: v('qaCarb'), fat: v('qaFat'), fib: v('qaFib') };
+  }
+  function setQuickAddMsg(text, tone) {
     const msg = document.getElementById('quickAddMsg');
-    const r = validateQuickAdd({ name: v('qaName'), cal: v('qaCal'), pro: v('qaPro'), carb: v('qaCarb'), fat: v('qaFat'), fib: v('qaFib') });
-    if (!r.ok) { msg.textContent = r.error; msg.className = 'text-xs min-h-[1rem] text-rose-400'; return; }
-    addFoodItem(r.item, 1);
-    msg.textContent = r.warning || `Logged "${r.item.name}" to ${document.getElementById('mealSlotSelect').value}.`;
-    msg.className = 'text-xs min-h-[1rem] ' + (r.warning ? 'text-amber-300' : 'text-emerald-400');
-    ['qaName', 'qaCal', 'qaPro', 'qaCarb', 'qaFat', 'qaFib'].forEach(id => { document.getElementById(id).value = ''; });
+    msg.textContent = text;
+    msg.className = 'text-xs min-h-[1rem] pt-2 ' + ({ bad: 'text-rose-400', warn: 'text-amber-300', ok: 'text-emerald-400' }[tone] || '');
+  }
+
+  function quickAdd() {
+    const r = buildFood(readQuickAdd());
+    if (!r.ok) { setQuickAddMsg(r.error, 'bad'); return; }
+    const { food } = r;
+
+    if (editingFoodId) {
+      foodsRef().doc(editingFoodId).set({ ...food, updatedAt: Date.now() }, { merge: true }).catch(onSyncError);
+      exitFoodEdit();
+      setQuickAddMsg(r.warning || `Updated "${food.name}" in My Foods. Entries already logged keep their old numbers.`, r.warning ? 'warn' : 'ok');
+      return;
+    }
+
+    let saved = '';
+    if (document.getElementById('qaSave').checked) {
+      const dup = findDuplicateFood(food.name, state.myFoods);
+      const replace = dup && window.confirm(`"${food.name}" is already in My Foods.\n\nOK: replace it with these numbers\nCancel: keep both`);
+      if (replace) foodsRef().doc(dup.id).set({ ...food, updatedAt: Date.now() }, { merge: true }).catch(onSyncError);
+      else foodsRef().add({ ...food, createdAt: Date.now() }).catch(onSyncError);
+      saved = replace ? ' Replaced in My Foods.' : ' Saved to My Foods.';
+    }
+    addFoodItem(food, 1);
+    setQuickAddMsg(r.warning ? `${r.warning}${saved}` : `Logged "${food.name}" to ${document.getElementById('mealSlotSelect').value}.${saved}`, r.warning ? 'warn' : 'ok');
+    QA_FIELDS.forEach(id => { document.getElementById(id).value = ''; });
+  }
+
+  function editMyFood(idx) {
+    const f = state.myFoods[idx];
+    if (!f) return;
+    editingFoodId = f.id;
+    const set = (id, val) => { document.getElementById(id).value = val ?? ''; };
+    set('qaName', f.name); set('qaServing', f.serving); set('qaCal', f.cal); set('qaPro', f.pro);
+    set('qaCarb', f.carb); set('qaFat', f.fat); set('qaFib', f.fib);
+    document.getElementById('quickAddPanel').open = true;
+    document.getElementById('quickAddTitle').textContent = 'Edit My Food';
+    document.getElementById('quickAddBtn').textContent = 'Save changes';
+    document.getElementById('qaSaveRow').classList.add('hidden');
+    document.getElementById('quickAddCancel').classList.remove('hidden');
+    setQuickAddMsg('Editing. Saving changes does not log anything.', '');
+    document.getElementById('quickAddPanel').scrollIntoView({ block: 'center' });
+  }
+
+  function exitFoodEdit() {
+    editingFoodId = null;
+    QA_FIELDS.forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('quickAddTitle').textContent = 'Quick add: enter your own food';
+    document.getElementById('quickAddBtn').textContent = '+ Log';
+    document.getElementById('qaSaveRow').classList.remove('hidden');
+    document.getElementById('quickAddCancel').classList.add('hidden');
+    setQuickAddMsg('', '');
+  }
+
+  function addMyFood(idx) {
+    const f = state.myFoods[idx];
+    if (!f) return;
+    addFoodItem(f, Number(document.getElementById(`myMult_${idx}`)?.value || 1));
+  }
+
+  function deleteMyFood(idx) {
+    const f = state.myFoods[idx];
+    if (!f) return;
+    const { name } = f;  // confirm() is plain text, not HTML
+    if (!window.confirm(`Delete "${name}" from My Foods? Entries already logged stay.`)) return;
+    if (editingFoodId === f.id) exitFoodEdit();
+    foodsRef().doc(f.id).delete().catch(onSyncError);
+  }
+
+  function renderMyFoods() {
+    const el = document.getElementById('myFoods');
+    if (!state.myFoods.length) {
+      el.innerHTML = `<p class="text-xs text-slate-500 italic">No foods yet. Use Quick add with "Save to My Foods" ticked.</p>`;
+      return;
+    }
+    el.innerHTML = state.myFoods.map((f, idx) => `
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2">
+        <div class="min-w-0">
+          <div class="text-sm font-bold text-slate-100 break-words">${esc(f.name)}</div>
+          <div class="text-xs text-slate-400">${esc(f.serving || '1 serving')} • ${f.cal} kcal • P ${f.pro}g • C ${f.carb}g • F ${f.fat}g • Fib ${f.fib || 0}g</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <select id="myMult_${idx}" aria-label="Portion multiplier" class="px-2 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded">
+            <option value="0.5">0.5x</option>
+            <option value="1" selected>1.0x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2.0x</option>
+          </select>
+          <button type="button" onclick="addMyFood(${idx})" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-3 py-2 rounded-lg">+ Log</button>
+          <button type="button" onclick="editMyFood(${idx})" class="text-xs text-slate-400 hover:text-emerald-400 underline ml-auto">Edit</button>
+          <button type="button" onclick="deleteMyFood(${idx})" aria-label="Delete food" class="text-slate-500 hover:text-rose-400 px-2">✕</button>
+        </div>
+      </div>`).join('');
   }
 
   function saveSlotAsMeal(slot) {
@@ -595,7 +741,7 @@
     document.getElementById('remainingSummary').textContent =
       `Remaining Today: ${Math.round(remCal)} kcal • ${Math.round(remPro)}g Protein • ${Math.round(remFib)}g Fiber needed`;
 
-    shownSuggestions = STAPLES.map(f => {
+    shownSuggestions = suggestionPool(state.myFoods, STAPLES).map(f => {
       let score = 0;
       if (remPro > 25) score += (f.pro * 3) - (f.fat * 1.5);
       if (remFib > 8) score += (f.fib * 4.5);
@@ -635,12 +781,14 @@
     `).join('');
   }
 
-  // Fallback search used when USDA is unavailable: every word must appear in the name or tag
-  function searchStaples(q) {
+  // Local word search: every word must appear in the name or tag
+  function matchFoods(q, list) {
     const words = String(q).toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) return [];
-    return STAPLES.filter(({ name, tag }) => words.every(w => `${name} ${tag}`.toLowerCase().includes(w)));
+    return list.filter(({ name, tag }) => words.every(w => `${name} ${tag || ''}`.toLowerCase().includes(w)));
   }
+
+  function searchStaples(q) { return matchFoods(q, STAPLES); }
 
   function renderFoodList(list, notice = '') {
     shownFoods = list;
@@ -708,8 +856,8 @@
 
   // Shows matching staples with a visible reason instead of failing silently
   function showStaplesFallback(q, why) {
-    const local = searchStaples(q);
-    renderFoodList(local, `${why} ${local.length ? `Showing ${local.length} matching staple${local.length === 1 ? '' : 's'}.` : 'No matching staples either.'}`);
+    const local = localMatches(q, state.myFoods, STAPLES);
+    renderFoodList(local, `${why} ${local.length ? `Showing ${local.length} match${local.length === 1 ? '' : 'es'} from My Foods and staples.` : 'No matching foods saved either.'}`);
   }
 
   async function searchUSDA() {
@@ -732,7 +880,7 @@
     }
     const data = await res.json().catch(() => ({}));
     const mapped = (data.foods || []).map(mapUSDAFood);
-    if (mapped.length) renderFoodList(mapped);
+    if (mapped.length) renderFoodList([...localMatches(q, state.myFoods, STAPLES), ...mapped]);
     else showStaplesFallback(q, `No USDA results for "${q}".`);
   }
 
@@ -943,6 +1091,7 @@
     renderFoodList(STAPLES);
     subscribeProfile();
     subscribeMeals();
+    subscribeFoods();
     subscribeDate(state.currentDate);
   }
 

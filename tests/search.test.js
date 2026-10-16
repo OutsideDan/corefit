@@ -1,7 +1,7 @@
 // Unit tests for CoreFit's search helpers. Run: node tests/search.test.js (also run by pre-deploy)
 import { load, runner } from './_load.js';
 
-const { STAPLES, searchStaples } = load(['const STAPLES =', 'function searchStaples(']);
+const { STAPLES, searchStaples } = load(['const STAPLES =', 'function matchFoods(', 'function searchStaples(']);
 const { ok, done } = runner();
 const names = (q) => searchStaples(q).map(f => f.name);
 

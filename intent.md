@@ -11,6 +11,7 @@
 - Offline logging via Firestore's local cache
 - One-time import of pre-sync data (browser localStorage or a JSON backup file)
 - Quick add: log a custom food by name + macros, with a calorie/macro typo warning (never blocks)
+- My Foods: Quick add saves the food by default (name, serving, macros); My Foods show first in search and in suggestions, log at 0.5x to 2x, and can be edited or deleted without changing past entries
 - Saved meals: save a meal slot's items under a name; one tap re-logs them to the selected slot and date
 
 ## Out of scope
@@ -25,6 +26,7 @@
 | `corefit/{uid}` | `profile` | last write wins (rarely edited) |
 | `corefit/{uid}/items/{id}` | one logged food (`date`, `slot`, macros) | add/remove are independent, so devices never overwrite each other |
 | `corefit/{uid}/days/{date}` | `water` | `increment()`, so concurrent changes add up |
+| `corefit/{uid}/foods/{id}` | My Food: `name`, `serving`, macros | last write wins; logged items are copies, so edits never change history |
 | `corefit/{uid}/meals/{id}` | saved meal: `name`, `items[]` | add/delete only; re-log writes new `items` docs |
 
 ## Embedded test
@@ -40,4 +42,6 @@
 | Saved meal loses items or re-logs to wrong date/slot | `tests/quickadd.test.js` | save/re-log round-trip cases |
 | Meals stored outside `corefit/{uid}` | `scripts/pre-deploy.js` | fails unless `mealsRef = () => userRef().collection('meals')` |
 | USDA branded food under-counted (per-100 values shown as per serving) | `tests/usda.test.js` (run by pre-deploy) | real Gatorade + cottage cheese records must scale to 182 kcal/30 g and 70 kcal/12 g |
+| My Foods saved wrong, search order wrong, portion math wrong, edit changes history | `tests/myfoods.test.js` (run by pre-deploy) | 17 cases incl. 2x Nurri = 300 kcal / 60 g |
+| My Foods stored outside `corefit/{uid}` | `scripts/pre-deploy.js` | fails unless `foodsRef = () => userRef().collection('foods')` |
 | Another account reads data | Firestore rules | Rules Playground: other uid on `corefit/xyz` denied (verified 2026-10-14) |
